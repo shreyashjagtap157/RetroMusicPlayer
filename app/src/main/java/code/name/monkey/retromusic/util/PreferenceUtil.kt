@@ -128,6 +128,35 @@ object PreferenceUtil {
             putString(SAF_SDCARD_URI, value)
         }
 
+    private const val ALBUM_ART_MAP = "album_art_map"
+
+    fun setAlbumArtUri(albumId: Long, uri: String?) {
+        val gson = Gson()
+        val type = object : TypeToken<MutableMap<String, String>>() {}.type
+        val current = try {
+            gson.fromJson<MutableMap<String, String>>(sharedPreferences.getStringOrDefault(ALBUM_ART_MAP, "{}"), type)
+        } catch (e: Exception) {
+            mutableMapOf<String, String>()
+        }
+        if (uri == null) {
+            current.remove(albumId.toString())
+        } else {
+            current[albumId.toString()] = uri
+        }
+        sharedPreferences.edit { putString(ALBUM_ART_MAP, gson.toJson(current, type)) }
+    }
+
+    fun getAlbumArtUri(albumId: Long): String? {
+        val gson = Gson()
+        val type = object : TypeToken<Map<String, String>>() {}.type
+        val current = try {
+            gson.fromJson<Map<String, String>>(sharedPreferences.getStringOrDefault(ALBUM_ART_MAP, "{}"), type)
+        } catch (e: Exception) {
+            emptyMap<String, String>()
+        }
+        return current[albumId.toString()]
+    }
+
     private val autoDownloadImagesPolicy
         get() = sharedPreferences.getStringOrDefault(
             AUTO_DOWNLOAD_IMAGES_POLICY,

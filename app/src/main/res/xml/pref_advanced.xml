@@ -78,6 +78,19 @@
             android:title="@string/pref_save_last_directory_title"
             app:icon="@drawable/ic_screen_lock_portrait" />
 
+        <androidx.preference.Preference
+            android:key="pref_saf_pick_directory"
+            android:layout="@layout/list_item_view"
+            android:summary="@string/pref_saf_pick_directory_summary"
+            android:title="@string/pref_saf_pick_directory_title"
+            app:icon="@drawable/ic_folder" />
+        <androidx.preference.Preference
+            android:key="pref_saf_clear_directory"
+            android:layout="@layout/list_item_view"
+            android:summary="@string/pref_saf_clear_directory_summary"
+            android:title="@string/pref_saf_clear_directory_title"
+            app:icon="@drawable/ic_delete" />
+
 
     </code.name.monkey.appthemehelper.common.prefs.supportv7.ATEPreferenceCategory>
     <code.name.monkey.appthemehelper.common.prefs.supportv7.ATEListPreference

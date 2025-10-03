@@ -6,9 +6,12 @@ import android.content.Context
 import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
+import androidx.documentfile.provider.DocumentFile
 import android.provider.BaseColumns
 import android.provider.MediaStore
 import android.util.Log
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
@@ -117,8 +120,109 @@ object MusicUtil : KoinComponent {
     fun deleteAlbumArt(context: Context, albumId: Long) {
         val contentResolver = context.contentResolver
         val localUri = "content://media/external/audio/albumart".toUri()
-        contentResolver.delete(ContentUris.withAppendedId(localUri, albumId), null, null)
-        contentResolver.notifyChange(localUri, null)
+        try {
+            // First, if we previously tracked a created URI or id for this album, try to delete it
+            val tracked = PreferenceUtil.getAlbumArtUri(albumId)
+            if (!tracked.isNullOrEmpty()) {
+                try {
+                    when {
+                        tracked.startsWith("ms:") -> {
+                            // Stored MediaStore image id
+                            val idPart = tracked.removePrefix("ms:")
+                            val imageId = idPart.toLongOrNull()
+                            if (imageId != null) {
+                                try {
+                                    val imagesUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, imageId)
+                                    context.contentResolver.delete(imagesUri, null, null)
+                                } catch (e: Exception) {
+                                    Log.w("MusicUtil", "Failed to delete tracked MediaStore image id: $imageId", e)
+                                }
+                            }
+                        }
+                        tracked.startsWith("saf:") -> {
+                            // Stored SAF document uri
+                            val uriString = tracked.removePrefix("saf:")
+                            try {
+                                val trackedUri = Uri.parse(uriString)
+                                // If it's a document uri, use DocumentFile to delete
+                                if (trackedUri.scheme == "content") {
+                                    try {
+                                        DocumentFile.fromSingleUri(context, trackedUri)?.delete()
+                                    } catch (e: Exception) {
+                                        // fallback to contentResolver
+                                        try {
+                                            context.contentResolver.delete(trackedUri, null, null)
+                                        } catch (ex: Exception) {
+                                            Log.w("MusicUtil", "Failed to delete tracked SAF album art uri", ex)
+                                        }
+                                    }
+                                } else {
+                                    try {
+                                        val f = File(trackedUri.path ?: "")
+                                        if (f.exists()) f.delete()
+                                    } catch (e: Exception) {
+                                        Log.w("MusicUtil", "Failed to delete tracked SAF album art file", e)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.w("MusicUtil", "Error parsing tracked SAF uri", e)
+                            }
+                        }
+                        else -> {
+                            // legacy stored raw uri/path - try deleting directly
+                            try {
+                                val trackedUri = Uri.parse(tracked)
+                                if (trackedUri.scheme == "content") {
+                                    try {
+                                        DocumentFile.fromSingleUri(context, trackedUri)?.delete()
+                                    } catch (e: Exception) {
+                                        try {
+                                            context.contentResolver.delete(trackedUri, null, null)
+                                        } catch (ex: Exception) {
+                                            Log.w("MusicUtil", "Failed to delete tracked album art uri", ex)
+                                        }
+                                    }
+                                } else {
+                                    val f = File(trackedUri.path ?: "")
+                                    if (f.exists()) f.delete()
+                                }
+                            } catch (e: Exception) {
+                                Log.w("MusicUtil", "Error deleting tracked album art", e)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("MusicUtil", "Error deleting tracked album art", e)
+                } finally {
+                    PreferenceUtil.setAlbumArtUri(albumId, null)
+                }
+            }
+
+            // Try to query the existing albumart entry to remove underlying file if any
+            val queryUri = ContentUris.withAppendedId(localUri, albumId)
+            context.contentResolver.query(queryUri, arrayOf(Constants.DATA), null, null, null)
+                ?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val path = cursor.getString(0)
+                        if (!path.isNullOrEmpty()) {
+                            try {
+                                val file = File(path)
+                                if (file.exists()) {
+                                    file.delete()
+                                }
+                            } catch (e: Exception) {
+                                Log.w("MusicUtil", "Could not delete album art file: $path", e)
+                            }
+                        }
+                    }
+                }
+
+            contentResolver.delete(ContentUris.withAppendedId(localUri, albumId), null, null)
+        } catch (e: Exception) {
+            Log.w("MusicUtil", "Failed to delete album art entry for album $albumId", e)
+        } finally {
+            contentResolver.notifyChange(localUri, null)
+        }
     }
 
     fun getArtistInfoString(
@@ -329,18 +433,128 @@ object MusicUtil : KoinComponent {
     ) {
         val contentResolver = context.contentResolver
         val artworkUri = "content://media/external/audio/albumart".toUri()
-        contentResolver.delete(ContentUris.withAppendedId(artworkUri, albumId), null, null)
-
-        val values = ContentValues().apply {
-            put("album_id", albumId)
-            put("_data", path)
+        // Remove any existing album art entry
+        try {
+            contentResolver.delete(ContentUris.withAppendedId(artworkUri, albumId), null, null)
+        } catch (e: Exception) {
+            Log.w("MusicUtil", "Could not delete existing album art entry", e)
         }
 
-        try {
-            contentResolver.insert(artworkUri, values)
+        if (path.isNullOrEmpty()) {
+            // nothing to insert
             contentResolver.notifyChange(artworkUri, null)
-        } catch (e: IllegalArgumentException) {
-           Log.e("MusicUtil", "Failed to insert album art", e)
+            return
+        }
+
+        // On Android R+ we should insert the artwork into MediaStore in a way other apps can access.
+        // Try to write a media store entry pointing to the file path. If that fails, fall back to legacy insert.
+        try {
+            if (VersionUtils.hasR()) {
+                // Try to add as an image in MediaStore and then point albumart to that file path
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, File(path).name)
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/AlbumArt")
+                }
+
+                var imageUri = try {
+                    contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                } catch (e: Exception) {
+                    Log.w("MusicUtil", "Failed to insert into Images MediaStore", e)
+                    null
+                }
+
+                // If we failed to insert into MediaStore, try SAF fallback if user provided a SAF tree URI
+                if (imageUri == null) {
+                    val safTree = PreferenceUtil.safSdCardUri
+                    if (!safTree.isNullOrEmpty()) {
+                        try {
+                            val treeUri = Uri.parse(safTree)
+                            val docId = DocumentFile.fromTreeUri(context, treeUri)?.createFile("image/jpeg", File(path).name)?.uri
+                            if (docId != null) {
+                                // write file contents
+                                context.contentResolver.openOutputStream(docId)?.use { out ->
+                                    File(path).inputStream().use { input ->
+                                        input.copyTo(out)
+                                    }
+                                }
+                                imageUri = docId
+                                // persist tracking so we can delete it later
+                                PreferenceUtil.setAlbumArtUri(albumId, imageUri.toString())
+                            }
+                        } catch (e: Exception) {
+                            Log.w("MusicUtil", "SAF fallback failed", e)
+                        }
+                    }
+                }
+
+                if (imageUri != null) {
+                    // Copy file contents into the MediaStore uri
+                    try {
+                        context.contentResolver.openOutputStream(imageUri)?.use { out ->
+                            File(path).inputStream().use { input ->
+                                input.copyTo(out)
+                            }
+                        }
+
+                        // After writing the image, try to insert albumart entry pointing to this file
+                        val dataPath = try {
+                            getSongFilePath(context, imageUri)
+                        } catch (e: Exception) {
+                            // If we used SAF the path may not be resolvable; store the uri in preferences and use SAF later for delete
+                            null
+                        }
+
+                        val albumValues = ContentValues().apply {
+                            put("album_id", albumId)
+                            put("_data", dataPath)
+                        }
+                        contentResolver.insert(artworkUri, albumValues)
+                        contentResolver.notifyChange(artworkUri, null)
+
+                        // Track created media uri for deletion later. If this was a MediaStore insert
+                        // we can store the image id as ms:<id>, otherwise saf:<uri>
+                        try {
+                            val id = ContentUris.parseId(imageUri)
+                            PreferenceUtil.setAlbumArtUri(albumId, "ms:" + id)
+                        } catch (e: Exception) {
+                            // Not a MediaStore id, store SAF/document uri
+                            try {
+                                PreferenceUtil.setAlbumArtUri(albumId, "saf:" + imageUri.toString())
+                            } catch (ex: Exception) {
+                                Log.w("MusicUtil", "Failed to persist tracked album art uri", ex)
+                            }
+                        }
+
+                        // Notify success to user
+                        try {
+                            Handler(Looper.getMainLooper()).post {
+                                context.showToast("Album art updated")
+                            }
+                        } catch (e: Exception) {
+                        }
+
+                        return
+                    } catch (e: Exception) {
+                        Log.w("MusicUtil", "Failed to write image to MediaStore uri", e)
+                    }
+                }
+                // If inserting into Images MediaStore failed, fallthrough to legacy insertion below
+            }
+
+            // Legacy / fallback insertion into albumart content provider
+            val values = ContentValues().apply {
+                put("album_id", albumId)
+                put("_data", path)
+            }
+            try {
+                contentResolver.insert(artworkUri, values)
+                contentResolver.notifyChange(artworkUri, null)
+            } catch (e: IllegalArgumentException) {
+                Log.e("MusicUtil", "Failed to insert album art", e)
+            }
+        } catch (e: Exception) {
+            Log.e("MusicUtil", "Failed to insert album art (unexpected)", e)
         }
     }
 

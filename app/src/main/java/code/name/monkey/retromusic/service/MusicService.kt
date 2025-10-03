@@ -708,12 +708,15 @@ class MusicService : MediaBrowserServiceCompat(),
         if (pendingQuit
             || (repeatMode == REPEAT_MODE_NONE && isLastTrack)
         ) {
-            quit()
-            seek(0, false)
+            pause()
+            playbackManager.stop()
             if (pendingQuit) {
                 pendingQuit = false
+                quit()
             } else if (repeatMode == REPEAT_MODE_NONE && isLastTrack) {
+                // Stop playback and reset to the beginning of the queue
                 position = 0
+                notifyChange(PLAY_STATE_CHANGED)
                 notifyChange(QUEUE_CHANGED)
             }
         } else {
@@ -731,10 +734,15 @@ class MusicService : MediaBrowserServiceCompat(),
         if (pendingQuit || repeatMode == REPEAT_MODE_NONE && isLastTrack) {
             playbackManager.setNextDataSource(null)
             pause(false)
-            seek(0, false)
+            playbackManager.stop()
             if (pendingQuit) {
                 pendingQuit = false
                 quit()
+            } else if (repeatMode == REPEAT_MODE_NONE && isLastTrack) {
+                // Stop playback at the end of the queue
+                position = 0
+                notifyChange(PLAY_STATE_CHANGED)
+                notifyChange(QUEUE_CHANGED)
             }
         } else {
             position = nextPosition
