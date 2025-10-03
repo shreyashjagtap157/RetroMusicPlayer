@@ -714,10 +714,8 @@ class MusicService : MediaBrowserServiceCompat(),
                 pendingQuit = false
                 quit()
             } else if (repeatMode == REPEAT_MODE_NONE && isLastTrack) {
-                // Stop playback and reset to the beginning of the queue
-                position = 0
+                // Stop playback at the last track, keep position unchanged
                 notifyChange(PLAY_STATE_CHANGED)
-                notifyChange(QUEUE_CHANGED)
             }
         } else {
             playNextSong(false)
@@ -739,10 +737,8 @@ class MusicService : MediaBrowserServiceCompat(),
                 pendingQuit = false
                 quit()
             } else if (repeatMode == REPEAT_MODE_NONE && isLastTrack) {
-                // Stop playback at the end of the queue
-                position = 0
+                // Stop playback at the end of the queue, keep position unchanged
                 notifyChange(PLAY_STATE_CHANGED)
-                notifyChange(QUEUE_CHANGED)
             }
         } else {
             position = nextPosition
@@ -844,9 +840,15 @@ class MusicService : MediaBrowserServiceCompat(),
     @Synchronized
     fun prepareNextImpl() {
         try {
-            val nextPosition = getNextPosition(false)
-            playbackManager.setNextDataSource(getSongAt(nextPosition).uri)
-            this.nextPosition = nextPosition
+            // When at last track with REPEAT_MODE_NONE, there is no next track
+            if (isLastTrack && repeatMode == REPEAT_MODE_NONE) {
+                playbackManager.setNextDataSource(null)
+                this.nextPosition = -1
+            } else {
+                val nextPosition = getNextPosition(false)
+                playbackManager.setNextDataSource(getSongAt(nextPosition).uri)
+                this.nextPosition = nextPosition
+            }
         } catch (ignored: Exception) {
         }
     }
