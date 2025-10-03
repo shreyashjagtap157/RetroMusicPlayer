@@ -146,6 +146,17 @@ class PlaybackManager(val context: Context) {
         context.sendBroadcast(audioEffectsIntent)
     }
 
+    /**
+     * Reopens the audio effect session. This should be called when the audio session ID changes
+     * (e.g., when a new track starts) to ensure equalizer and other audio effects remain active.
+     */
+    fun reopenAudioEffectSession() {
+        if (playback != null && playback!!.isPlaying) {
+            closeAudioEffectSession()
+            openAudioEffectSession()
+        }
+    }
+
     fun switchToLocalPlayback(onChange: (wasPlaying: Boolean, progress: Int) -> Unit) {
         playbackLocation = PlaybackLocation.LOCAL
         switchToPlayback(createLocalPlayback(), onChange)

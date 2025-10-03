@@ -743,6 +743,8 @@ class MusicService : MediaBrowserServiceCompat(),
         } else {
             position = nextPosition
             prepareNextImpl()
+            // Reopen audio effect session for the new track to ensure equalizer stays active
+            playbackManager.reopenAudioEffectSession()
             notifyChange(META_CHANGED)
         }
     }
