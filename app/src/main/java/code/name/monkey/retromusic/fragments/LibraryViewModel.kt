@@ -84,7 +84,7 @@ class LibraryViewModel(
 
     fun getPlaylists(): LiveData<List<PlaylistWithSongs>> = playlists
 
-    fun getGenre(): LiveData<List<Genre>> = genres
+    fun getGenres(): LiveData<List<Genre>> = genres
 
     fun getHome(): LiveData<List<Home>> = home
 
@@ -112,8 +112,11 @@ class LibraryViewModel(
         playlists.postValue(repository.fetchPlaylistWithSongs())
     }
 
-    private suspend fun fetchGenres() {
-        genres.postValue(repository.fetchGenres())
+    private fun fetchGenres() {
+        viewModelScope.launch {
+            val genreList = repository.fetchGenresAsync()
+            genres.postValue(genreList)
+        }
     }
 
     private suspend fun fetchHomeSections() {

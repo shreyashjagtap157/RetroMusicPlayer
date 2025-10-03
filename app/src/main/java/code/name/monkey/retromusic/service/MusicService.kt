@@ -16,7 +16,7 @@ package code.name.monkey.retromusic.service
 import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.appwidget.AppWidgetManager
+import android.app.widget.AppWidgetManager
 import android.bluetooth.BluetoothDevice
 import android.content.*
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
@@ -1391,6 +1391,30 @@ class MusicService : MediaBrowserServiceCompat(),
         mediaSession?.setCallback(mediaSessionCallback)
         mediaSession?.isActive = true
         mediaSession?.setMediaButtonReceiver(mediaButtonReceiverPendingIntent)
+    }
+
+    // Add a method to integrate lyrics fetching and display
+    fun displayLyrics(title: String, artist: String) {
+        val lyricsManager = LyricsManager()
+        val lyricsContent = lyricsManager.fetchLyricsFromLocal(title, artist)
+
+        if (lyricsContent != null) {
+            val parsedLyrics = lyricsManager.parseLrcContent(lyricsContent)
+            // Logic to update the UI with parsed lyrics
+            updateLyricsUI(parsedLyrics)
+        } else {
+            // Logic to handle unavailable lyrics
+            showNoLyricsAvailableMessage()
+        }
+    }
+
+    // Placeholder methods for UI updates
+    private fun updateLyricsUI(lyrics: Map<String, String>) {
+        // Implement UI update logic here
+    }
+
+    private fun showNoLyricsAvailableMessage() {
+        // Implement logic to show a message when lyrics are unavailable
     }
 
     inner class MusicBinder : Binder() {

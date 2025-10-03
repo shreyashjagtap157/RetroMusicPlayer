@@ -20,6 +20,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
 import androidx.fragment.app.FragmentActivity
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.databinding.ItemGenreBinding
@@ -94,9 +95,29 @@ class GenreAdapter(
     }
 
     @SuppressLint("NotifyDataSetChanged")
-    fun swapDataSet(list: List<Genre>) {
-        dataSet = list
-        notifyDataSetChanged()
+    fun updateDataSet(newList: List<Genre>) {
+        val diffCallback = GenreDiffCallback(dataSet, newList)
+        val diffResult = DiffUtil.calculateDiff(diffCallback)
+        dataSet = newList
+        diffResult.dispatchUpdatesTo(this)
+    }
+
+    class GenreDiffCallback(
+        private val oldList: List<Genre>,
+        private val newList: List<Genre>
+    ) : DiffUtil.Callback() {
+
+        override fun getOldListSize(): Int = oldList.size
+
+        override fun getNewListSize(): Int = newList.size
+
+        override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+            return oldList[oldItemPosition].id == newList[newItemPosition].id
+        }
+
+        override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+            return oldList[oldItemPosition] == newList[newItemPosition]
+        }
     }
 
     inner class ViewHolder(val binding: ItemGenreBinding) : RecyclerView.ViewHolder(binding.root),

@@ -25,6 +25,8 @@ import code.name.monkey.retromusic.extensions.getStringOrNull
 import code.name.monkey.retromusic.model.Genre
 import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.util.PreferenceUtil
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 interface GenreRepository {
     fun genres(query: String): List<Genre>
@@ -143,5 +145,13 @@ class RealGenreRepository(
         } catch (e: SecurityException) {
             return null
         }
+    }
+
+    suspend fun fetchGenresAsync(): List<Genre> = withContext(Dispatchers.IO) {
+        getGenresFromCursor(makeGenreCursor())
+    }
+
+    suspend fun fetchGenresByQueryAsync(query: String): List<Genre> = withContext(Dispatchers.IO) {
+        getGenresFromCursor(makeGenreCursor(query))
     }
 }
