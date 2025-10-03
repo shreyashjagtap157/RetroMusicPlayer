@@ -100,7 +100,8 @@ abstract class AbsTagEditorActivity<VB : ViewBinding> : AbsBaseActivity() {
     internal val albumArtist: String?
         get() {
             return try {
-                getAudioFile(songPaths!![0]).tagOrCreateAndSetDefault.getFirst(FieldKey.ALBUM_ARTIST)
+                    val allAlbumArtists = getAudioFile(songPaths!![0]).tagOrCreateAndSetDefault.getAll(FieldKey.ALBUM_ARTIST)
+                    if (allAlbumArtists.isNotEmpty()) allAlbumArtists.joinToString(", ") else null
             } catch (e: Exception) {
                 logE(e)
                 null
@@ -110,7 +111,8 @@ abstract class AbsTagEditorActivity<VB : ViewBinding> : AbsBaseActivity() {
     protected val songTitle: String?
         get() {
             return try {
-                getAudioFile(songPaths!![0]).tagOrCreateAndSetDefault.getFirst(FieldKey.TITLE)
+                    val allArtists = getAudioFile(songPaths!![0]).tagOrCreateAndSetDefault.getAll(FieldKey.ARTIST)
+                    if (allArtists.isNotEmpty()) allArtists.joinToString(", ") else null
             } catch (e: Exception) {
                 logE(e)
                 null
@@ -120,7 +122,8 @@ abstract class AbsTagEditorActivity<VB : ViewBinding> : AbsBaseActivity() {
         get() {
             return try {
                 getAudioFile(songPaths!![0]).tagOrCreateAndSetDefault.getFirst(FieldKey.COMPOSER)
-            } catch (e: Exception) {
+                    val allAlbumArtists = getAudioFile(songPaths!![0]).tagOrCreateAndSetDefault.getAll(FieldKey.ALBUM_ARTIST)
+                    if (allAlbumArtists.isNotEmpty()) allAlbumArtists.joinToString(", ") else null
                 logE(e)
                 null
             }
